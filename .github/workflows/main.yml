@@ -1,4 +1,4 @@
-name: Build Android APK (Fixed)
+name: Build Android APK (Direct Gradle)
 
 on:
   push:
@@ -28,25 +28,32 @@ jobs:
     - name: Accept Android SDK licenses
       run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
       
-    - name: Update Gradle files for compatibility
+    - name: Install Gradle directly
       run: |
-        # Update gradle wrapper properties
-        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
-        distributionBase=GRADLE_USER_HOME
-        distributionPath=wrapper/dists
-        distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
-        networkTimeout=10000
-        zipStoreBase=GRADLE_USER_HOME
-        zipStorePath=wrapper/dists
-        EOF
+        # Download and install Gradle 8.5
+        wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+        unzip -q gradle-8.5-bin.zip
+        export GRADLE_HOME=$PWD/gradle-8.5
+        export PATH=$GRADLE_HOME/bin:$PATH
+        echo "GRADLE_HOME=$PWD/gradle-8.5" >> $GITHUB_ENV
+        echo "$PWD/gradle-8.5/bin" >> $GITHUB_PATH
+        gradle --version
         
-        # Update root build.gradle for compatibility
+    - name: Update build files for compatibility
+      run: |
+        # Update root build.gradle
         cat > build.gradle << 'EOF'
         plugins {
             id 'com.android.application' version '8.1.4' apply false
-            id 'com.android.library' version '8.1.4' apply false
             id 'org.jetbrains.kotlin.android' version '1.9.20' apply false
             id 'com.google.devtools.ksp' version '1.9.20-1.0.14' apply false
+        }
+
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
         }
 
         task clean(type: Delete) {
@@ -54,7 +61,7 @@ jobs:
         }
         EOF
         
-        # Update app build.gradle for compatibility
+        # Update app build.gradle
         cat > app/build.gradle << 'EOF'
         plugins {
             id 'com.android.application'
@@ -72,7 +79,6 @@ jobs:
                 targetSdk 34
                 versionCode 1
                 versionName "1.0"
-
                 testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
                 vectorDrawables {
                     useSupportLibrary true
@@ -85,19 +91,24 @@ jobs:
                     proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
                 }
             }
+            
             compileOptions {
                 sourceCompatibility JavaVersion.VERSION_1_8
                 targetCompatibility JavaVersion.VERSION_1_8
             }
+            
             kotlinOptions {
                 jvmTarget = '1.8'
             }
+            
             buildFeatures {
                 compose true
             }
+            
             composeOptions {
                 kotlinCompilerExtensionVersion '1.5.5'
             }
+            
             packaging {
                 resources {
                     excludes += '/META-INF/{AL2.0,LGPL2.1}'
@@ -114,22 +125,12 @@ jobs:
             implementation 'androidx.compose.ui:ui-graphics'
             implementation 'androidx.compose.ui:ui-tooling-preview'
             implementation 'androidx.compose.material3:material3'
-            
-            // Navigation
             implementation 'androidx.navigation:navigation-compose:2.7.5'
-            
-            // ViewModel
             implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0'
-            
-            // Room
             implementation 'androidx.room:room-runtime:2.6.1'
             implementation 'androidx.room:room-ktx:2.6.1'
             ksp 'androidx.room:room-compiler:2.6.1'
-            
-            // Coroutines
             implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-            
-            // Material Icons Extended
             implementation 'androidx.compose.material:material-icons-extended:1.5.4'
             
             testImplementation 'junit:junit:4.13.2'
@@ -142,59 +143,52 @@ jobs:
         }
         EOF
         
-    - name: Download Gradle wrapper
-      run: |
-        curl -L https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+        # Update settings.gradle
+        cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+
+        rootProject.name = "Maternity Baby Tracker"
+        include ':app'
+        EOF
         
-    - name: Make gradlew executable
-      run: chmod +x gradlew
-      
-    - name: Clean build
-      run: ./gradlew clean --no-daemon
-      
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon --stacktrace
-      
-    - name: Build Release APK
-      run: ./gradlew assembleRelease --no-daemon --stacktrace
-      
+    - name: Build with direct Gradle
+      run: |
+        export GRADLE_HOME=$PWD/gradle-8.5
+        export PATH=$GRADLE_HOME/bin:$PATH
+        gradle clean
+        gradle assembleDebug --stacktrace
+        gradle assembleRelease --stacktrace
+        
+    - name: List build outputs
+      run: |
+        echo "Listing build outputs..."
+        find . -name "*.apk" -type f
+        ls -la app/build/outputs/apk/debug/ || echo "Debug APK directory not found"
+        ls -la app/build/outputs/apk/release/ || echo "Release APK directory not found"
+        
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: maternity-tracker-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: warn
         
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
         name: maternity-tracker-release
-        path: app/build/outputs/apk/release/app-release-unsigned.apk
-
-    - name: Create Release
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v1.0.${{ github.run_number }}
-        name: Maternity Tracker v1.0.${{ github.run_number }}
-        body: |
-          🎉 **Maternity & Baby Shopping Tracker APK**
-          
-          **Features:**
-          - ✅ Shopping list management
-          - ✅ Budget tracking
-          - ✅ Smart filtering
-          - ✅ Beautiful lavender theme
-          
-          **Installation:**
-          1. Download the APK file below
-          2. Enable "Unknown Sources" in Android settings
-          3. Install and enjoy!
-          
-          Built automatically from commit ${{ github.sha }}
-        files: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/release/app-release-unsigned.apk
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: app/build/outputs/apk/release/*.apk
+        if-no-files-found: warn
