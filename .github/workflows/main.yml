@@ -1,9 +1,7 @@
-name: Build Android APK
+name: Build Android APK (Simple)
 
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
@@ -23,63 +21,36 @@ jobs:
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
-      
-    - name: Cache Gradle packages
-      uses: actions/cache@v3
       with:
-        path: |
-          ~/.gradle/caches
-          ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-        restore-keys: |
-          ${{ runner.os }}-gradle-
-          
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+        api-level: 34
+        build-tools: 34.0.0
+        
+    - name: Accept Android SDK licenses
+      run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
       
-    - name: Build debug APK
-      run: ./gradlew assembleDebug
-      
-    - name: Build release APK
-      run: ./gradlew assembleRelease
-      
+    - name: Install Gradle 8.0
+      run: |
+        wget https://services.gradle.org/distributions/gradle-8.0-bin.zip
+        unzip gradle-8.0-bin.zip
+        export PATH=$PATH:$PWD/gradle-8.0/bin
+        gradle --version
+        
+    - name: Build with Gradle
+      run: |
+        export PATH=$PATH:$PWD/gradle-8.0/bin
+        gradle wrapper
+        ./gradlew clean
+        ./gradlew assembleDebug
+        ./gradlew assembleRelease
+        
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: maternity-tracker-debug
+        path: app/build/outputs/apk/debug/*.apk
         
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-release
-        path: app/build/outputs/apk/release/app-release-unsigned.apk
-
-    - name: Create Release
-      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v1.0.${{ github.run_number }}
-        name: Maternity Tracker v1.0.${{ github.run_number }}
-        body: |
-          🎉 **Maternity & Baby Shopping Tracker APK**
-          
-          **Features:**
-          - ✅ Shopping list management
-          - ✅ Budget tracking
-          - ✅ Smart filtering
-          - ✅ Beautiful lavender theme
-          
-          **Installation:**
-          1. Download the APK file below
-          2. Enable "Unknown Sources" in Android settings
-          3. Install and enjoy!
-          
-          Built automatically from commit ${{ github.sha }}
-        files: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/apk/release/app-release-unsigned.apk
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: maternity-tracker-release
+        path: app/build/outputs/apk/release/*.apk
