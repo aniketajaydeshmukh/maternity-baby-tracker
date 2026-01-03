@@ -1,4 +1,4 @@
-name: Build Android APK (Direct Gradle)
+name: Build Android APK (Final Fix)
 
 on:
   push:
@@ -30,7 +30,6 @@ jobs:
       
     - name: Install Gradle directly
       run: |
-        # Download and install Gradle 8.5
         wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
         unzip -q gradle-8.5-bin.zip
         export GRADLE_HOME=$PWD/gradle-8.5
@@ -39,9 +38,23 @@ jobs:
         echo "$PWD/gradle-8.5/bin" >> $GITHUB_PATH
         gradle --version
         
-    - name: Update build files for compatibility
+    - name: Fix repository configuration
       run: |
-        # Update root build.gradle
+        # Update settings.gradle (remove repository mode restriction)
+        cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+
+        rootProject.name = "Maternity Baby Tracker"
+        include ':app'
+        EOF
+        
+        # Update root build.gradle (remove allprojects block)
         cat > build.gradle << 'EOF'
         plugins {
             id 'com.android.application' version '8.1.4' apply false
@@ -49,24 +62,22 @@ jobs:
             id 'com.google.devtools.ksp' version '1.9.20-1.0.14' apply false
         }
 
-        allprojects {
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
-
         task clean(type: Delete) {
             delete rootProject.buildDir
         }
         EOF
         
-        # Update app build.gradle
+        # Update app build.gradle (add repositories block)
         cat > app/build.gradle << 'EOF'
         plugins {
             id 'com.android.application'
             id 'org.jetbrains.kotlin.android'
             id 'com.google.devtools.ksp'
+        }
+
+        repositories {
+            google()
+            mavenCentral()
         }
 
         android {
@@ -143,41 +154,22 @@ jobs:
         }
         EOF
         
-        # Update settings.gradle
-        cat > settings.gradle << 'EOF'
-        pluginManagement {
-            repositories {
-                google()
-                mavenCentral()
-                gradlePluginPortal()
-            }
-        }
-        dependencyResolutionManagement {
-            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
-
-        rootProject.name = "Maternity Baby Tracker"
-        include ':app'
-        EOF
-        
     - name: Build with direct Gradle
       run: |
         export GRADLE_HOME=$PWD/gradle-8.5
         export PATH=$GRADLE_HOME/bin:$PATH
-        gradle clean
+        gradle clean --stacktrace
         gradle assembleDebug --stacktrace
         gradle assembleRelease --stacktrace
         
     - name: List build outputs
       run: |
-        echo "Listing build outputs..."
+        echo "Listing all APK files..."
         find . -name "*.apk" -type f
-        ls -la app/build/outputs/apk/debug/ || echo "Debug APK directory not found"
-        ls -la app/build/outputs/apk/release/ || echo "Release APK directory not found"
+        echo "Debug directory contents:"
+        ls -la app/build/outputs/apk/debug/ || echo "Debug directory not found"
+        echo "Release directory contents:"
+        ls -la app/build/outputs/apk/release/ || echo "Release directory not found"
         
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -192,3 +184,32 @@ jobs:
         name: maternity-tracker-release
         path: app/build/outputs/apk/release/*.apk
         if-no-files-found: warn
+
+    - name: Create Release
+      if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v1.0.${{ github.run_number }}
+        name: Maternity Tracker v1.0.${{ github.run_number }}
+        body: |
+          🎉 **Maternity & Baby Shopping Tracker APK**
+          
+          **Features:**
+          - ✅ Shopping list management
+          - ✅ Budget tracking
+          - ✅ Smart filtering
+          - ✅ Beautiful lavender theme
+          
+          **Installation:**
+          1. Download the APK file below
+          2. Enable "Unknown Sources" in Android settings
+          3. Install and enjoy!
+          
+          Built automatically from commit ${{ github.sha }}
+        files: |
+          app/build/outputs/apk/debug/*.apk
+          app/build/outputs/apk/release/*.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
