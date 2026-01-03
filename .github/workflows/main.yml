@@ -1,4 +1,4 @@
-name: Build Android APK (AppCompat Fix)
+name: Build Android APK (Icon Fix)
 
 on:
   push:
@@ -157,7 +157,7 @@ jobs:
         }
         EOF
         
-        # Create simple themes.xml without problematic attributes
+        # Create simple themes.xml
         cat > app/src/main/res/values/themes.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
@@ -184,6 +184,16 @@ jobs:
             <color name="white">#FFFFFFFF</color>
         </resources>
         EOF
+        
+    - name: Remove corrupted icon files
+      run: |
+        echo "Removing corrupted launcher icons..."
+        rm -f app/src/main/res/mipmap-*/ic_launcher.png
+        rm -f app/src/main/res/mipmap-*/ic_launcher_round.png
+        
+        # Keep only the XML vector drawables which work fine
+        echo "Keeping vector drawable icons..."
+        ls -la app/src/main/res/mipmap-anydpi-v26/ || echo "Vector icons directory not found"
         
     - name: Build with direct Gradle
       run: |
