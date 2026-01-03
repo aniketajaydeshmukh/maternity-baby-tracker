@@ -1,4 +1,4 @@
-name: Build Android APK (Material3 Fix)
+name: Build Android APK (AppCompat Fix)
 
 on:
   push:
@@ -67,7 +67,7 @@ jobs:
         }
         EOF
         
-        # Update app build.gradle
+        # Update app build.gradle with AppCompat dependency
         cat > app/build.gradle << 'EOF'
         plugins {
             id 'com.android.application'
@@ -128,6 +128,9 @@ jobs:
         }
 
         dependencies {
+            // AppCompat for theme support
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            
             implementation 'androidx.core:core-ktx:1.12.0'
             implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
             implementation 'androidx.activity:activity-compose:1.8.2'
@@ -154,38 +157,31 @@ jobs:
         }
         EOF
         
-        # Fix themes.xml - Use AppCompat theme instead of Material3
+        # Create simple themes.xml without problematic attributes
         cat > app/src/main/res/values/themes.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <resources xmlns:tools="http://schemas.android.com/tools">
+        <resources>
             <!-- Base application theme. -->
-            <style name="Theme.MaternityBabyTracker" parent="Theme.AppCompat.DayNight.NoActionBar">
-                <!-- Customize your light theme here. -->
-                <item name="colorPrimary">@color/md_theme_light_primary</item>
-                <item name="colorPrimaryVariant">@color/md_theme_light_secondary</item>
-                <item name="colorOnPrimary">@color/md_theme_light_onPrimary</item>
-                <item name="colorSecondary">@color/md_theme_light_secondary</item>
-                <item name="colorSecondaryVariant">@color/md_theme_light_tertiary</item>
-                <item name="colorOnSecondary">@color/md_theme_light_onSecondary</item>
-                <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
+            <style name="Theme.MaternityBabyTracker" parent="Theme.AppCompat.Light.NoActionBar">
+                <!-- Primary brand color. -->
+                <item name="colorPrimary">@color/purple_500</item>
+                <item name="colorPrimaryDark">@color/purple_700</item>
+                <item name="colorAccent">@color/teal_200</item>
             </style>
         </resources>
         EOF
         
-        # Simplify colors.xml
+        # Create simple colors.xml
         cat > app/src/main/res/values/colors.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
+            <color name="purple_200">#FFBB86FC</color>
+            <color name="purple_500">#9C27B0</color>
+            <color name="purple_700">#4A148C</color>
+            <color name="teal_200">#E1BEE7</color>
+            <color name="teal_700">#FF018786</color>
             <color name="black">#FF000000</color>
             <color name="white">#FFFFFFFF</color>
-            
-            <!-- Lavender theme colors -->
-            <color name="md_theme_light_primary">#9C27B0</color>
-            <color name="md_theme_light_onPrimary">#FFFFFF</color>
-            <color name="md_theme_light_secondary">#E1BEE7</color>
-            <color name="md_theme_light_onSecondary">#4A148C</color>
-            <color name="md_theme_light_tertiary">#F3E5F5</color>
-            <color name="md_theme_light_onTertiary">#2E7D32</color>
         </resources>
         EOF
         
